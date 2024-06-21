@@ -7,7 +7,9 @@ h = waitbar(0,'Initializing');
 audio_info = audioinfo(inputfile);
 
 if audio_info.NumChannels > 1
-    warning('Audio file contains more than one channel. Detection will use the mean of all channels.')
+    multi_channel_option = 'first';  % or 'mean' or 'max'; see `switch multi_channel_option` below.
+%     warning('Audio file contains more than one channel. Detection will use the mean of all channels.')
+    warning('Audio file contains more than one channel. Detection will use the FIRST channel.')  % edited behavior CDR 2024.05.07
 end
 
 % Get network and spectrogram settings
@@ -77,7 +79,7 @@ for i = 1:length(chunks)-1
         % Another method could be to take the max of the multiple channels,
         % or just take the first channel.
         audio = audio - mean(audio,1);
-        switch 'mean'
+        switch multi_channel_option
             case 'first'
                 audio = audio(:,1);
             case 'mean'

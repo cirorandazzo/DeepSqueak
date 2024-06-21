@@ -253,6 +253,8 @@ audio = handles.data.AudioSamples(...
 playbackRate = handles.data.audiodata.SampleRate * handles.data.settings.playback_rate; % set playback rate
 audio = resample(audio, 192000, playbackRate);
 audio = audio - mean(audio);
+audio = audio(:);  % ensure audio is row vec; otherwise sizes below might not work (return 1000*1000 instead of 1*1000)
+
 % Use a window funtion to smooth the beginning and end to remove clicks
 w = hamming(2000);
 audio(1:1000) = audio(1:1000) .* w(1:1000);
