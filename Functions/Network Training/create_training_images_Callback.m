@@ -3,10 +3,30 @@ function create_training_images_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-% Select the files to make images from
-[trainingdata, trainingpath] = uigetfile([char(handles.data.settings.detectionfolder) '/*.mat'],'Select Detection File for Training ','MultiSelect', 'on');
-if isnumeric(trainingdata); return; end
-trainingdata = cellstr(trainingdata);
+answer = questdlg('Select directory or specific files? (Note: directory includes all subdirectories.', ...
+	'Create Training Data', ...
+	'Directory', 'Files', 'Cancel', ...  % dialog buttons
+    'Cancel' ...  % if window is closed
+);
+
+% Handle response & get files
+switch answer
+    case 'Directory'
+        trainingfolder = uigetdir([char(handles.data.settings.detectionfolder)],'Select Detection Folder for Training');
+        files = dir(fullfile(trainingfolder, '**/*.mat'));
+    case 'Files'
+        [trainingdata, trainingpath] = uigetfile([char(handles.data.settings.detectionfolder)],'Select Detection File for Training ','MultiSelect', 'on');
+        trainingpath = fileparts(trainingpath);  % remove trailing filesep
+
+        files(length(trainingdata)) = struct();  % preallocate struct array
+        [files.name] = trainingdata{:};
+        [files(:).folder] = deal(trainingpath);
+end
+
+if strcmp(answer, 'Cancel') | isempty(files)
+    disp('No .mat files found or user canceled.')
+    return
+end
 
 % Get training settings
 prompt = {'Window Length (s)','Overlap (%)','NFFT (s)','Image Length (s)',...
@@ -25,15 +45,23 @@ AmplitudeRange = [.5, 1.5];
 StretchRange = [0.75, 1.25];
 h = waitbar(0,'Initializing');
 
-for k = 1:length(trainingdata)
+totalImageCount = 0;
+failedFiles = {};
+
+for k = 1:length(files)
+try
+    trainingpath = files(k).folder;
+    trainingdata = files(k).name;
+
     TTable = table({},{},'VariableNames',{'imageFilename','USV'});
     
     % Load the detection and audio files
     audioReader = squeakData();
-    [Calls, audioReader.audiodata] = loadCallfile([trainingpath trainingdata{k}],handles);
+    disp(['File: ' trainingdata]);
+    [Calls, audioReader.audiodata] = loadCallfile(fullfile(trainingpath, trainingdata),handles);
     
     % Make a folder for the training images
-    [~, filename] = fileparts(trainingdata{k});
+    [~, filename] = fileparts(trainingdata);
     fname = fullfile(handles.data.squeakfolder,'Training','Images',filename);
     mkdir(fname);
     
@@ -60,6 +88,11 @@ for k = 1:length(trainingdata)
         for ii=bn+1:lst
             Distance(ii,lst+1:end)=zeros(length(Distance(ii,lst+1:end)),1);
         end
+
+        if bn == lst+1
+            error('Infinite loop!')
+        end
+
         bn=lst+1;
     end
     
@@ -96,18 +129,29 @@ for k = 1:length(trainingdata)
                 StretchRange);
             TTable = [TTable;{fullfile('Training','Images',filename,IMname), box}];
         end
-        catch
+        catch error
             disp("Image/Box is Bad... You Should Feel Bad");
         end
-        waitbar(bin/length(unique(bins)), h, sprintf('Processing File %g of %g', k, length(trainingdata)));        
+        waitbar(bin/length(unique(bins)), h, sprintf('Processing File %g of %g', k, length(files)));        
         
     end
     save(fullfile(handles.data.squeakfolder,'Training',[filename '.mat']),'TTable','wind','noverlap','nfft','imLength');
     disp(['Created ' num2str(height(TTable)) ' Training Images']);
+    totalImageCount = totalImageCount + height(TTable);
+
+catch error
+    disp(error)
+    failedFiles{end+1} = [trainingpath filesep trainingdata];
+end
 end
 close(h)
-end
 
+disp(['Finished! Created ' num2str(totalImageCount) 'images from ' num2str(length(files) - length(failedFiles)) 'files.'])
+disp(['Failed files: '])
+for i_ff = 1:length(failedFiles)
+    disp(['  - ' failedFiles{i_ff}]);
+end
+end
 
 % Create training images and boxes
 function [im, box] = CreateTrainingData(audio,rate,Calls,wind,noverlap,nfft,freqCutoff,filename,AmplitudeRange,replicatenumber,StretchRange)
