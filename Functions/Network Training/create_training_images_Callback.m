@@ -18,6 +18,10 @@ switch answer
         [trainingdata, trainingpath] = uigetfile([char(handles.data.settings.detectionfolder)],'Select Detection File for Training ','MultiSelect', 'on');
         trainingpath = fileparts(trainingpath);  % remove trailing filesep
 
+        if ~iscell(trainingdata)  % one file only; make 1x1 cell for compatibility
+            trainingdata = {trainingdata};
+        end
+
         files(length(trainingdata)) = struct();  % preallocate struct array
         [files.name] = trainingdata{:};
         [files(:).folder] = deal(trainingpath);
